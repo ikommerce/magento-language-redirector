@@ -1,0 +1,5 @@
+/support/
+/magento/
+*.egg-info/
+/.project
+/.pydevproject
