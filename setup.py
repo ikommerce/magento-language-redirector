@@ -23,6 +23,6 @@ setup(
     description="Magento language redirector for NGINX.",
     long_description=open("README.txt").read(),
     install_requires=[
-        "dataset"
+        "dataset>=1.0", "mysql-connector==2.1.4"
     ]
 )

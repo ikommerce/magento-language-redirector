@@ -31,7 +31,7 @@ class MagentoAccessor:
         prefix = tree.find(".//db/table_prefix").text
         self.prefix = prefix if prefix else ""
 
-        self.db_url = 'mysql://{username}:{password}@{hostname}/{database}'.format(
+        self.db_url = 'mysql+mysqlconnector://{username}:{password}@{hostname}/{database}'.format(
             username=tree.find(".//connection/username").text,
             password=tree.find(".//connection/password").text,
             database=tree.find(".//connection/dbname").text,
@@ -84,6 +84,12 @@ location = / {{
   if ($http_cookie ~* "cookielaw") {{
     break;
   }}
+  if ($args != "") {{
+    break;
+  }}
+  if ($http_referer ~* "{basename}") {{
+    break;
+  }}
   # accept-language: en,en-US;q=0.8,ja;q=0.6
   set $first_language $http_accept_language;
   if ($first_language ~* '^(.+?),') {{
@@ -93,31 +99,34 @@ location = / {{
     language_tail = '''
   index index.html index.php;
   try_files $uri $uri/ @handler;
-}}
+}
 '''
 
 
     def __init__(self):
         parser = argparse.ArgumentParser(description='redirector')
         parser.add_argument('-v', '--verbose', action='store_true', default=False)
-        parser.add_argument('--languages', action='append',
+        parser.add_argument('--language', action='append',
                             help='two letter language followed by = and then by store code',
-                            type=lambda kv: kv.split('='), dest='languages')
+                            type=lambda kv: kv.split('='), dest='language')
         parser.add_argument('-d', '--directory', required=True,
                             help='target directory for configuration files')
+        parser.add_argument('-b', '--basename', required=True,
+                            help='choose a common base name')
         parser.add_argument('magento_path', metavar='MAGENTOPATH',
                             help='base path of magento')
         args = parser.parse_args()
         self.magento_path = args.magento_path
-        self.languages = dict(args.languages)
+        self.languages = dict(args.language if args.language else [])
         self.target_directory = args.directory
+        self.basename = args.basename
         logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
 
     def to_nginx(self, baseurl, values, languages):
 
         name = next(data.code for data in values if data.url == baseurl)
         with open(os.path.join(self.target_directory, name + '.conf'), 'w') as f:
-            f.write(self.language_head.format(url=baseurl))
+            f.write(self.language_head.format(url=baseurl, basename=self.basename))
             for data in languages:
                 if data.url != baseurl:
                     f.write(self.rewrite_cond.format(language=data.language,
@@ -160,7 +169,9 @@ location = / {{
                     pass # skipped
             else:
                 if language in by_lang:
-                    raise Exception('multiple language found use --languages for ' + language)
+                    codes = [item.code for item in mapping if item.language.startswith(language)]
+                    raise Exception('multiple language found use --language {lang}= one from {codes}'.format(lang=language,
+                                                                                                             codes=codes))
                 by_lang[language] = data
         for url in by_url.keys():
             self.to_nginx(url, values, by_lang.values())
