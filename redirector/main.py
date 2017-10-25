@@ -76,9 +76,26 @@ StoreData = namedtuple('StoreDate', ['language', 'url', 'is_default', 'code'])
 
 class MageApp:
 
-    rewrite_cond = '''if ($first_language ~* '{language}') {{
- rewrite /.* {url} break;
-}}'''
+    rewrite_cond = '''  if ($first_language ~* '{language}') {{
+     rewrite /.* {url} break;
+  }}'''
+    language_head = '''# baseurl: {url}
+location = / {{
+  if ($http_cookie ~* "cookielaw") {{
+    break;
+  }}
+  # accept-language: en,en-US;q=0.8,ja;q=0.6
+  set $first_language $http_accept_language;
+  if ($first_language ~* '^(.+?),') {{
+    set $first_language $1;
+  }}
+'''
+    language_tail = '''
+  index index.html index.php;
+  try_files $uri $uri/ @handler;
+}}
+'''
+
 
     def __init__(self):
         parser = argparse.ArgumentParser(description='redirector')
@@ -100,11 +117,12 @@ class MageApp:
 
         name = next(data.code for data in values if data.url == baseurl)
         with open(os.path.join(self.target_directory, name + '.conf'), 'w') as f:
-            f.write('# baseurl = ' + baseurl + '\n')
+            f.write(self.language_head.format(url=baseurl))
             for data in languages:
                 if data.url != baseurl:
                     f.write(self.rewrite_cond.format(language=data.language,
                                                      url=data.url))
+            f.write(self.language_tail)
 
     def run(self):
         mage = MagentoAccessor(self.magento_path)
