@@ -6,6 +6,8 @@ __contact__ = 'marco.andreini@gmail.com'
 __url__ = 'TODO'
 __license__ = 'GPLv3'
 
+with open('requirements.txt') as f:
+    required = f.read().splitlines()
 
 setup(
     name="language-redirector",
@@ -22,7 +24,5 @@ setup(
     include_package_data=True,
     description="Magento language redirector for NGINX.",
     long_description=open("README.txt").read(),
-    install_requires=[
-        "dataset>=1.0", "mysql-connector==2.1.4"
-    ]
+    install_requires=required
 )

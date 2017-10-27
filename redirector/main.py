@@ -10,7 +10,7 @@ from xml.etree import ElementTree
 class MagentoAccessor:
     """
 
-    accessor to magento data
+    simple direct access to magento data and database
 
     """
 
@@ -72,9 +72,15 @@ class MagentoAccessor:
                                                    scope='default',
                                                    path=path)
 
+
 StoreData = namedtuple('StoreDate', ['language', 'url', 'is_default', 'code'])
 
-class MageApp:
+class RedirectorGenerator:
+    """
+
+    language redirector for nginx from magento
+
+    """
 
     rewrite_cond = '''  if ($first_language ~* '{language}') {{
      rewrite /.* {url} break;
@@ -102,7 +108,6 @@ location = / {{
 }
 '''
 
-
     def __init__(self):
         parser = argparse.ArgumentParser(description='redirector')
         parser.add_argument('-v', '--verbose', action='store_true', default=False)
@@ -123,6 +128,10 @@ location = / {{
         logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
 
     def to_nginx(self, baseurl, values, languages):
+        """
+        single rule generator
+
+        """
 
         name = next(data.code for data in values if data.url == baseurl)
         with open(os.path.join(self.target_directory, name + '.conf'), 'w') as f:
@@ -133,7 +142,12 @@ location = / {{
                                                      url=data.url))
             f.write(self.language_tail)
 
-    def run(self):
+    def generate(self):
+        """
+        generate snippets
+
+        """
+
         mage = MagentoAccessor(self.magento_path)
         mapping = []
         by_url = {}
@@ -157,7 +171,7 @@ location = / {{
             if len(by_url[store.url]) > 1 and not store.is_default:
                 url += '?___store={code}'.format(code=store.code)
             language = store.language[:store.language.find('_')]
-            # Si ricompone lo storedata con i language e gli url modificati.
+            # new storedata with modified language and url
             data = StoreData(language=language, url=url, code=store.code,
                              is_default=store.is_default)
             values.append(data)
@@ -177,4 +191,4 @@ location = / {{
             self.to_nginx(url, values, by_lang.values())
 
 def cli():
-    MageApp().run()
+    RedirectorGenerator().generate()
