@@ -152,6 +152,7 @@ location = / {{
         """
 
         k, v = item.split('=')
+        return (k, v)
 
     def to_nginx(self, baseurl, values, languages):
         """
@@ -170,7 +171,7 @@ location = / {{
 
     def generate(self):
         """
-        generate snippets
+        snippets generator
 
         """
 
@@ -195,6 +196,7 @@ location = / {{
         for store in mapping:
             url = store.url
             if len(by_url[store.url]) > 1 and not store.is_default:
+                # standard magento store redirect
                 url += '?___store={code}'.format(code=store.code)
             language = store.language[:store.language.find('_')]
             # new storedata with modified language and url

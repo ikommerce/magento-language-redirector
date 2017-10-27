@@ -23,6 +23,6 @@ setup(
     ''',
     include_package_data=True,
     description="Magento language redirector for NGINX.",
-    long_description=open("README.txt").read(),
+    long_description=open("README.md").read(),
     install_requires=required
 )
