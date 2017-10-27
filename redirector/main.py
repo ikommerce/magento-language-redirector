@@ -111,10 +111,11 @@ location = / {{
     def __init__(self):
         parser = argparse.ArgumentParser(description='redirector')
         parser.add_argument('-v', '--verbose', action='store_true', default=False)
-        parser.add_argument('--language', action='append',
+        parser.add_argument('-l', '--language', action='append',
                             help='two letter language followed by = and then by store code',
-                            type=lambda kv: kv.split('='), dest='language')
+                            type=RedirectorGenerator.key_value, dest='language')
         parser.add_argument('-d', '--directory', required=True,
+                            type=RedirectorGenerator.writeable_dir,
                             help='target directory for configuration files')
         parser.add_argument('-b', '--basename', required=True,
                             help='choose a common base name')
@@ -126,6 +127,31 @@ location = / {{
         self.target_directory = args.directory
         self.basename = args.basename
         logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
+
+    @staticmethod
+    def writeable_dir(dir):
+        """
+        writeable directory
+
+        """
+
+        if not os.path.exists(dir):
+            raise ValueError('directory {0} must exists'.format(dir))
+        if not os.path.isdir(dir):
+            raise ValueError('path {} must be a directory'.format(dir))
+        if not os.access(dir, os.W_OK):
+            raise ValueError('directory {} must be writeable'.format(dir))
+        return dir
+
+    @staticmethod
+    def key_value(item):
+        """
+
+        key = value
+
+        """
+
+        k, v = item.split('=')
 
     def to_nginx(self, baseurl, values, languages):
         """
