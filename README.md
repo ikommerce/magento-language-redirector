@@ -5,15 +5,15 @@ different accept-language.
 
 ## Install
 
-'''sh
+```sh
 pip install --user ./
-'''
+```
 
 ## Usage:
 
 Command line interface syntax:
 
-'''sh
+```sh
 language-redirector -d output-directory --language en=english \
   --language it=italian /my/magento-path
-'''
+```
