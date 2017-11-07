@@ -4,6 +4,8 @@ import argparse
 import dataset
 import logging
 import os.path
+import re
+from operator import attrgetter
 from collections import namedtuple
 from xml.etree import ElementTree
 
@@ -82,9 +84,11 @@ class RedirectorGenerator:
 
     """
 
+    # case insensitive matching:
     rewrite_cond = '''  if ($first_language ~* '{language}') {{
      rewrite /.* {url} break;
-  }}'''
+  }}
+'''
     language_head = '''# baseurl: {url}
 location = / {{
   if ($http_cookie ~* "cookielaw") {{
@@ -119,6 +123,8 @@ location = / {{
                             help='target directory for configuration files')
         parser.add_argument('-b', '--basename', required=True,
                             help='choose a common base name')
+        parser.add_argument('-s', '--skip-site', action='append', default=[],
+                            help='Skip a website by magento code')
         parser.add_argument('magento_path', metavar='MAGENTOPATH',
                             help='base path of magento')
         args = parser.parse_args()
@@ -126,6 +132,7 @@ location = / {{
         self.languages = dict(args.language if args.language else [])
         self.target_directory = args.directory
         self.basename = args.basename
+        self.sites_to_skip = args.skip_site
         logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
 
     @staticmethod
@@ -154,20 +161,42 @@ location = / {{
         k, v = item.split('=')
         return (k, v)
 
+    @staticmethod
+    def to_language_code(lang):
+        return lang.replace('_', '-').lower()
+
     def to_nginx(self, baseurl, values, languages):
         """
         single rule generator
 
         """
-
-        name = next(data.code for data in values if data.url == baseurl)
+        from pprint import pprint
+        # il corrispondete per url StoreData
+        site_data = self.optimize([data for data in values if data.url == baseurl])[0]
+        name = site_data.code
         with open(os.path.join(self.target_directory, name + '.conf'), 'w') as f:
             f.write(self.language_head.format(url=baseurl, basename=self.basename))
             for data in languages:
-                if data.url != baseurl:
-                    f.write(self.rewrite_cond.format(language=data.language,
+                # evitati gli stessi indirizzi ...
+                # ... e anche la lingua corrispondente alla lingua-paese.
+                if data.url != baseurl and \
+                    not site_data.language.startswith(data.language):
+                    f.write(self.rewrite_cond.format(language=self.to_language_code(data.language),
                                                      url=data.url))
             f.write(self.language_tail)
+
+    @staticmethod
+    def optimize(values):
+        """
+
+        simplify StoreDatas filtering duplicate language match (like it-IT and it)
+
+        """
+        return sorted((value for value in values
+                      if not any(value != other and value.url == other.url and
+                                 re.match(other.language, value.language, re.IGNORECASE)
+                                 for other in values)),
+                      key=attrgetter('language'), reverse=True)
 
     def generate(self):
         """
@@ -179,10 +208,13 @@ location = / {{
         mapping = []
         by_url = {}
         for store in mage.stores():
+            code = store['code']
+            # skip website by magento code:
+            if code in self.sites_to_skip:
+                continue
             language = mage.config(store, 'general/locale/code')['value']
             url = mage.config(store, 'web/unsecure/base_url')['value']
             is_default = mage.is_default_store(store)
-            code = store['code']
             data = StoreData(language=language, url=url, is_default=is_default,
                              code=code)
             mapping.append(data)
@@ -198,25 +230,30 @@ location = / {{
             if len(by_url[store.url]) > 1 and not store.is_default:
                 # standard magento store redirect
                 url += '?___store={code}'.format(code=store.code)
-            language = store.language[:store.language.find('_')]
-            # new storedata with modified language and url
-            data = StoreData(language=language, url=url, code=store.code,
-                             is_default=store.is_default)
-            values.append(data)
-            fixed = self.languages.get(language)
-            if not fixed is None:
-                if fixed == data.code:
-                    by_lang[language] = data
+            languages = [store.language]
+            if '_' in store.language:
+                languages.append(store.language[:store.language.find('_')])
+            for language in languages:
+                # new storedata with modified language and url
+                data = StoreData(language=language, url=url, code=store.code,
+                                 is_default=store.is_default)
+                values.append(data)
+                fixed = self.languages.get(language)
+                if not fixed is None:
+                    if fixed == data.code:
+                        by_lang[language] = data
+                    else:
+                        pass # skipped
                 else:
-                    pass # skipped
-            else:
-                if language in by_lang:
-                    codes = [item.code for item in mapping if item.language.startswith(language)]
-                    raise Exception('multiple language found use --language {lang}= one from {codes}'.format(lang=language,
-                                                                                                             codes=codes))
-                by_lang[language] = data
+                    if language in by_lang:
+                        codes = [item.code for item in mapping if item.language.startswith(language)]
+                        raise Exception('multiple language found use -l {lang}= with one of {codes}'.format(lang=language,
+                                                                                                            codes=codes))
+                    by_lang[language] = data
+        # the order is need in order to match language correctly in nginx
+        lang_values = self.optimize(by_lang.values())
         for url in by_url.keys():
-            self.to_nginx(url, values, by_lang.values())
+            self.to_nginx(url, values, lang_values)
 
 def cli():
     RedirectorGenerator().generate()
