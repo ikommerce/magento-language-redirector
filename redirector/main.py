@@ -94,6 +94,9 @@ location = / {{
   if ($http_cookie ~* "cookielaw") {{
     break;
   }}
+  if ($http_user_agent ~* 'http|bot|crawl|spider|^$') {{
+    break;
+  }}
   if ($args != "") {{
     break;
   }}
